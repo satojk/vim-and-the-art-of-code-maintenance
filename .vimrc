@@ -9,3 +9,7 @@ set expandtab
 set shiftwidth=4
 set softtabstop=4
 set smartindent
+
+" Search
+set ignorecase "ic
+set incsearch "is
