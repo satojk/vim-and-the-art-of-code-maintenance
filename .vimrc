@@ -13,3 +13,7 @@ set smartindent
 " Search
 set ignorecase "ic
 set incsearch "is
+
+" Basic Mappings
+noremap H ^
+noremap L $
