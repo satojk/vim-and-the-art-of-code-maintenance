@@ -10,11 +10,15 @@ mkdir ~/.config/zathura
 cp zathurarc ~/.config/zathura/zathurarc
 
 cat bashrc_tail >> ~/.bashrc
+source ~/.bashrc
 
 # Remove dock
 sudo apt remove gnome-shell-extension-ubuntu-dock
 
 sudo apt install gnome-tweaks
+
+sudo apt autoremove
+
 
 cat further_todos
 

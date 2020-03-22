@@ -9,3 +9,5 @@ Install tex, texcount, git
 SSH keys.
 
 Configure terminator (to be automated)
+
+Install Vundle for vim (requires git clone)
