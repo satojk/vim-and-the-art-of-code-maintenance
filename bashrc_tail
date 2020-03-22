@@ -1,0 +1,17 @@
+
+function cl {
+    cd "${1:-/home/lucas/}" && ls;
+}
+
+function scd {
+    echo $PWD | xsel -i;
+}
+
+function lcd {
+    cl $(xsel -o);
+}
+
+alias xx='xdg-open'
+alias zz='zathura --mode fullscreen'
+alias texcount='perl ~/main/texcount/texcount.pl in.tex'
+
