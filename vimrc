@@ -16,7 +16,15 @@ Plugin 'mhartington/oceanic-next'
 
 Plugin 'itchyny/lightline.vim'
 
-Plugin 'frazrepo/vim-rainbow'
+Plugin 'lervag/vimtex'
+let g:tex_flavor='latex'
+let g:tex_conceal='abdmg'
+
+"Plugin 'SirVer/ultisnips'
+"Plugin 'honza/vim-snippets'
+"let g:UltiSnipsExpandTrigger="<tab>"
+"let g:UltiSnipsJumpForwardTrigger="<c-b>"
+"let g:UltiSnipsJumpBackwardTrigger="<c-z>"
 
 " All of your Plugins must be added before the following line
 call vundle#end()            " required
@@ -52,8 +60,6 @@ let g:lightline = {
       \ 'colorscheme': 'jellybeans',
       \ }
 
-let g:rainbow_active = 1
-
 " Indentation
 set expandtab
 set shiftwidth=4
@@ -77,16 +83,25 @@ set fdo-=search
 set foldmethod=indent
 set foldnestmax=4
 set foldminlines=5
-:command FI set foldmethod=indent
-:command FM set foldmethod=manual
 nnoremap <Space> za
+
+" Splits and Tabs
+set splitright
+noremap <c-t> :Tex<CR>
+noremap <c-w> :Vex!<CR>
+noremap <c-h> <c-w>h
+noremap <c-l> <c-w>l
 
 " Basic Mappings
 noremap H ^
 noremap L $
 noremap C :!wc<CR>
+noremap <c-p> :w<CR>:!pdflatex in.tex<CR>
+noremap S i$<esc>la$<esc>
+noremap <c-k> <c-e>
+noremap <c-j> <c-y>
 
 autocmd Filetype javascript setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
 autocmd Filetype css setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
 autocmd Filetype html setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
-autocmd Filetype latex setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
+autocmd Filetype tex setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2 conceallevel=1
