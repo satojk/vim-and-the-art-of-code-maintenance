@@ -20,6 +20,17 @@ Plugin 'lervag/vimtex'
 let g:tex_flavor='latex'
 let g:tex_conceal='abdmg'
 
+Plugin 'majutsushi/tagbar'
+nnoremap T :TagbarOpenAutoClose<CR>
+
+Plugin 'preservim/nerdcommenter'
+let g:NERDCreateDefaultMappings=0
+
+Plugin 'rhysd/clever-f.vim'
+let g:clever_f_smart_case=1
+let g:NERDToggleCheckAllLines = 1
+let g:NERDSpaceDelims = 1
+
 "Plugin 'SirVer/ultisnips'
 "Plugin 'honza/vim-snippets'
 "let g:UltiSnipsExpandTrigger="<tab>"
@@ -53,6 +64,7 @@ set number
 set relativenumber
 set ruler
 set cursorline
+set scrolloff=7
 
 set laststatus=2
 set noshowmode
@@ -60,7 +72,11 @@ let g:lightline = {
       \ 'colorscheme': 'jellybeans',
       \ }
 
-" Indentation
+set list
+set listchars=tab:!·,trail:·
+
+set showcmd
+
 set expandtab
 set shiftwidth=4
 set softtabstop=4
@@ -72,18 +88,25 @@ set indentkeys-=0#
 " Wrap
 set formatoptions+=w
 set tw=79
+set colorcolumn=80
 
 " Search
-set ignorecase "ic
-set incsearch "is
+nnoremap / /\v
+set ignorecase
+set smartcase
+set gdefault
+set incsearch
 set hlsearch
 set fdo-=search
+
+" Autocomplete
+setglobal complete=.
 
 " Fold
 set foldmethod=indent
 set foldnestmax=4
-set foldminlines=5
-nnoremap <Space> za
+set foldminlines=3
+map <Space> za
 
 " Splits and Tabs
 set splitright
@@ -95,13 +118,33 @@ noremap <c-l> <c-w>l
 " Basic Mappings
 noremap H ^
 noremap L $
-noremap C :!wc<CR>
-noremap <c-p> :w<CR>:!pdflatex in.tex<CR>
-noremap S i$<esc>la$<esc>
+noremap <tab> %
 noremap <c-k> <c-e>
 noremap <c-j> <c-y>
+nnoremap ; :
+nnoremap U <c-r>
+nnoremap C :!wc<CR>
+nnoremap <c-p> :w<CR>:!pdflatex in.tex<CR>
+nnoremap S i$<esc>la$<esc>
+nnoremap <c-r> <esc>:source $MYVIMRC<CR>
+noremap Y "+y
+noremap P "+p
+
+" Leader Mappings
+noremap , <Nop>
+let mapleader=','
+
+nnoremap <leader>clw <esc>:%s/\s\+$//<CR>:let @/=''<CR><c-o>
+nnoremap <leader>sub <esc>:%s/
+nnoremap <leader>n <esc>:noh<CR>
+nmap <leader>cc <plug>NERDCommenterInvert
+
 
 autocmd Filetype javascript setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
+autocmd Filetype js setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
 autocmd Filetype css setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
 autocmd Filetype html setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
 autocmd Filetype tex setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2 conceallevel=1
+autocmd BufNewFile,BufRead *.tt set syntax=cpp
+autocmd BufNewFile,BufRead *.genie set syntax=javascript
+autocmd BufNewFile,BufRead *.pegjs set syntax=javascript
