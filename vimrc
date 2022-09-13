@@ -114,13 +114,13 @@ noremap <c-t> :Tex<CR>
 noremap <c-w> :Vex!<CR>
 noremap <c-h> <c-w>h
 noremap <c-l> <c-w>l
+noremap <c-j> <c-w>j
+noremap <c-k> <c-w>k
 
 " Basic Mappings
 noremap H ^
 noremap L $
 noremap <tab> %
-noremap <c-k> <c-e>
-noremap <c-j> <c-y>
 nnoremap ; :
 nnoremap U <c-r>
 nnoremap C :!wc<CR>
@@ -129,6 +129,7 @@ nnoremap S i$<esc>la$<esc>
 nnoremap <c-r> <esc>:source $MYVIMRC<CR>
 noremap Y "+y
 noremap P "+p
+nnoremap <c-c> :!perl ~/Downloads/save/texcount.pl '%:p'<CR>
 
 " Leader Mappings
 noremap , <Nop>
@@ -138,6 +139,10 @@ nnoremap <leader>clw <esc>:%s/\s\+$//<CR>:let @/=''<CR><c-o>
 nnoremap <leader>sub <esc>:%s/
 nnoremap <leader>n <esc>:noh<CR>
 nmap <leader>cc <plug>NERDCommenterInvert
+nnoremap <leader>vrc <esc>:tabe ~/.vimrc<CR>G
+nnoremap <leader>src <esc>:source ~/.vimrc<CR>:noh<CR>
+nnoremap <leader>pdb <esc>oimport pdb; pdb.set_trace()<esc>
+nnoremap <leader>json <esc>:% !python3 -m json.tool<CR>
 
 
 autocmd Filetype javascript setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
