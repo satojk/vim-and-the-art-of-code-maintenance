@@ -86,8 +86,6 @@ set cinkeys-=0#
 set indentkeys-=0#
 
 " Wrap
-set formatoptions+=w
-set tw=79
 set colorcolumn=80
 
 " Search
@@ -143,6 +141,8 @@ nnoremap <leader>vrc <esc>:tabe ~/.vimrc<CR>G
 nnoremap <leader>src <esc>:source ~/.vimrc<CR>:noh<CR>
 nnoremap <leader>pdb <esc>oimport pdb; pdb.set_trace()<esc>
 nnoremap <leader>json <esc>:% !python3 -m json.tool<CR>
+nnoremap <leader>lend <esc>yyplcwend<esc>O
+nnoremap <leader>lsha <esc>o\begin{shaded}<CR>\end{shaded}<esc>O
 
 
 autocmd Filetype javascript setlocal expandtab tabstop=2 shiftwidth=2 softtabstop=2
