@@ -1,2 +1,4 @@
 # vim-and-the-art-of-code-maintenance
-Vim configuration files that seem to work well for me.
+init contains some files that are useful for me when I'm setting up a new machine.
+
+plugin contains some vim plugins.
