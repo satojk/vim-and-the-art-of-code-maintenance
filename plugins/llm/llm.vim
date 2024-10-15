@@ -91,7 +91,7 @@ function! s:GetAnalysisFromClaude(full_text, selected_text, user_request)
 
     let l:json_data = json_encode({
         \ "model": "claude-3-5-sonnet-20240620",
-        \ "max_tokens": 4000,
+        \ "max_tokens": 6000,
         \ "messages": [
         \   {"role": "user", "content": l:prompt}
         \ ]
@@ -114,48 +114,32 @@ function! s:GetAnalysisFromClaude(full_text, selected_text, user_request)
 endfunction
 
 function! s:GenerateDiff()
-    let l:temp_original = tempname()
-    let l:temp_rewrite = tempname()
-
-    " Save original content (entire file)
-    let l:original_content = join(getbufline(bufnr(s:original_file), 1, '$'), "\n")
-    call writefile(split(l:original_content, "\n"), l:temp_original)
-
-    " Save rewritten content (entire file)
-    let l:rewrite_content = join(getbufline(s:excerpt_bufnr, 1, '$'), "\n")
-    call writefile(split(l:rewrite_content, "\n"), l:temp_rewrite)
-
-    " Generate diff
-    let l:diff_command = 'diff -u ' . shellescape(l:temp_original) . ' ' . shellescape(l:temp_rewrite) . ' > ' . shellescape(s:excerpt_diff_file)
+    let l:diff_command = 'diff -u ' . shellescape(s:original_file) . ' ' . shellescape(s:excerpt_file) . ' > ' . shellescape(s:excerpt_diff_file)
     call system(l:diff_command)
-
-    " Clean up temporary files
-    call delete(l:temp_original)
-    call delete(l:temp_rewrite)
 endfunction
 
 function! s:ApplyChanges()
-    " Read the content from the excerpt file
-    let l:new_content = readfile(s:excerpt_file)
+    " Save all buffers to ensure they're up to date
+    wall
 
-    " Switch to the original file buffer
-    execute "buffer " . bufnr(s:original_file)
+    " Apply the patch
+    let l:patch_command = 'patch -u ' . shellescape(s:original_file) . ' -i ' . shellescape(s:excerpt_diff_file)
+    let l:patch_output = system(l:patch_command)
 
-    " Save the current view
-    let l:view = winsaveview()
-
-    " Replace the entire content of the original file
-    silent! execute "undojoin | keepjumps keeppatterns %delete_"
-    call append(0, l:new_content)
-    if getline('$') == ''
-        silent! undojoin | $delete_
+    " Check if patch was successful
+    if v:shell_error
+        echohl ErrorMsg
+        echo "Failed to apply patch: " . l:patch_output
+        echohl None
+        return
     endif
+
+    " Reload the buffer to reflect changes
+    execute "buffer " . bufnr(s:original_file)
+    edit!
 
     " Update the end line number
     let s:end_line = line('$')
-
-    " Restore the view
-    call winrestview(l:view)
 
     " Ensure the cursor is on a valid line
     if line('.') > line('$')
@@ -164,8 +148,6 @@ function! s:ApplyChanges()
 
     " Ensure folds are opened as they were before
     normal! zv
-
-    echo "Changes applied successfully."
 endfunction
 
 function! s:ToggleExcerptDiff()
