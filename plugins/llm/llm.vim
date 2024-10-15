@@ -28,7 +28,7 @@ function! s:CopyToTmp() range
     " Create the splits
     execute "vsplit " . s:chat_file
     let s:chat_bufnr = bufnr('%')
-    execute "20split " . s:excerpt_file
+    execute "split " . s:excerpt_file
     let s:excerpt_bufnr = bufnr('%')
     execute "set filetype=" . l:original_filetype
     normal! zR
@@ -49,7 +49,7 @@ function! s:GetCompletion()
 
     " Check for rewrite tags
     let l:rewrite_start = stridx(l:response, "<rewrite>")
-    let l:rewrite_end = stridx(l:response, "</rewrite>")
+    let l:rewrite_end = strridx(l:response, "</rewrite>")
 
     if l:rewrite_start != -1 && l:rewrite_end != -1
         let l:rewrite = l:response[l:rewrite_start+9 : l:rewrite_end-1]
@@ -60,23 +60,7 @@ function! s:GetCompletion()
         edit!
 
         " Generate diff
-        let l:temp_original = tempname()
-        let l:temp_rewrite = tempname()
-
-        " Save original content
-        let l:original_content = join(getbufline(bufnr(s:original_file), s:start_line, s:end_line), "\n")
-        call writefile(split(l:original_content, "\n"), l:temp_original)
-
-        " Save rewritten content
-        call writefile(split(l:rewrite, "\n"), l:temp_rewrite)
-
-        " Generate diff
-        let l:diff_command = 'diff -u ' . shellescape(l:temp_original) . ' ' . shellescape(l:temp_rewrite) . ' > ' . shellescape(s:excerpt_diff_file)
-        call system(l:diff_command)
-
-        " Clean up temporary files
-        call delete(l:temp_original)
-        call delete(l:temp_rewrite)
+        call s:GenerateDiff()
 
         " Remove the rewrite tags from the response
         let l:response = l:response[:l:rewrite_start-1] . l:response[l:rewrite_end+10:]
@@ -102,9 +86,8 @@ function! s:GetAnalysisFromClaude(full_text, selected_text, user_request)
                  \ "\n\nNow, focus on this selected section:\n\n" . a:selected_text .
                  \ "\n\nI have the following request about the selected section:\n" . a:user_request .
                  \ "\n\nPlease provide a concise response. If my request involves modifying the code, " .
-                 \ "include only the rewritten version of the selected section within <rewrite> tags. " .
-                 \ "Do not include any code outside the selection in your rewrite. " .
-                 \ "Be aware that the <rewrite> content will directly replace the selected section."
+                 \ "include the rewritten version of the **entire file** within <rewrite> tags. " .
+                 \ "This is important because the entire file will be replaced by the version you rewrote."
 
     let l:json_data = json_encode({
         \ "model": "claude-3-5-sonnet-20240620",
@@ -130,35 +113,95 @@ function! s:GetAnalysisFromClaude(full_text, selected_text, user_request)
     endif
 endfunction
 
+function! s:GenerateDiff()
+    let l:temp_original = tempname()
+    let l:temp_rewrite = tempname()
+
+    " Save original content (entire file)
+    let l:original_content = join(getbufline(bufnr(s:original_file), 1, '$'), "\n")
+    call writefile(split(l:original_content, "\n"), l:temp_original)
+
+    " Save rewritten content (entire file)
+    let l:rewrite_content = join(getbufline(s:excerpt_bufnr, 1, '$'), "\n")
+    call writefile(split(l:rewrite_content, "\n"), l:temp_rewrite)
+
+    " Generate diff
+    let l:diff_command = 'diff -u ' . shellescape(l:temp_original) . ' ' . shellescape(l:temp_rewrite) . ' > ' . shellescape(s:excerpt_diff_file)
+    call system(l:diff_command)
+
+    " Clean up temporary files
+    call delete(l:temp_original)
+    call delete(l:temp_rewrite)
+endfunction
+
 function! s:ApplyChanges()
-    let l:new_lines = readfile(s:excerpt_file)
+    " Read the content from the excerpt file
+    let l:new_content = readfile(s:excerpt_file)
+
+    " Switch to the original file buffer
+    execute "buffer " . bufnr(s:original_file)
 
     " Save the current view
     let l:view = winsaveview()
 
-    " Apply the changes
-    silent! execute "keepjumps keeppatterns buffer " . bufnr(s:original_file)
-    silent! execute "keepjumps keeppatterns " . s:start_line . "," . s:end_line . "delete"
-    silent! call append(s:start_line - 1, l:new_lines)
+    " Replace the entire content of the original file
+    silent! execute "undojoin | keepjumps keeppatterns %delete_"
+    call append(0, l:new_content)
+    if getline('$') == ''
+        silent! undojoin | $delete_
+    endif
 
     " Update the end line number
-    let s:end_line = s:start_line + len(l:new_lines) - 1
+    let s:end_line = line('$')
 
     " Restore the view
     call winrestview(l:view)
 
-    " Adjust cursor position if it's after the changed section
-    if line('.') > s:end_line
-        let l:offset = len(l:new_lines) - (s:end_line - s:start_line + 1)
-        execute "normal! " . l:offset . "j"
+    " Ensure the cursor is on a valid line
+    if line('.') > line('$')
+        normal! G
     endif
 
     " Ensure folds are opened as they were before
     normal! zv
 
-    echo "Changes applied to original file."
+    echo "Changes applied successfully."
+endfunction
+
+function! s:ToggleExcerptDiff()
+    " Save the current window number
+    let l:current_win = winnr()
+
+    " Find the window with the excerpt or diff buffer
+    let l:excerpt_win = bufwinnr(s:excerpt_bufnr)
+    let l:diff_win = bufwinnr(s:excerpt_diff_file)
+    let l:target_win = l:excerpt_win != -1 ? l:excerpt_win : l:diff_win
+
+    " If neither window is found, do nothing
+    if l:target_win == -1
+        echo "Excerpt or diff window not found."
+        return
+    endif
+
+    " Move to the target window
+    execute l:target_win . "wincmd w"
+
+    " Toggle between excerpt and diff
+    if &filetype == 'diff'
+        execute "buffer " . s:excerpt_bufnr
+        execute "set filetype=" . &filetype
+    else
+        call s:GenerateDiff()
+        execute "edit " . s:excerpt_diff_file
+        setlocal filetype=diff
+    endif
+
+    " Return to the original window
+    execute l:current_win . "wincmd w"
 endfunction
 
 command! -range Llm <line1>,<line2>call <SID>CopyToTmp()
 command! Ask call <SID>GetCompletion()
 command! Apply call <SID>ApplyChanges()
+command! Ted call <SID>ToggleExcerptDiff()
+command! GenDiff call <SID>GenerateDiff()
