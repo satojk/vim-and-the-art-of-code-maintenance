@@ -90,8 +90,12 @@ function! s:GetAnalysisFromClaude(full_text, selected_text, user_request)
                  \ "This is important because the entire file will be replaced by the version you rewrote."
 
     let l:json_data = json_encode({
-        \ "model": "claude-3-5-sonnet-20240620",
-        \ "max_tokens": 6000,
+        \ "model": "claude-3-7-sonnet-20250219",
+        \ "max_tokens": 32000,
+        \ "thinking": {
+        \   "type": "enabled",
+        \   "budget_tokens": 16000
+        \ },
         \ "messages": [
         \   {"role": "user", "content": l:prompt}
         \ ]
