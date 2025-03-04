@@ -49,9 +49,6 @@ function! s:GetCompletion()
 
     let l:response = s:GetAnalysisFromClaude(l:full_content, l:selected_content, l:user_request)
 
-    " Save the full response to the response file
-    call writefile(split(l:response, "\n"), s:response_file)
-
     " Check for rewrite tags
     let l:has_changes = 0
     let l:original_lines = getbufline(bufnr(s:original_file), 1, '$')
@@ -180,10 +177,11 @@ function! s:GetAnalysisFromClaude(full_text, selected_text, user_request)
     let l:numbered_selected_text = s:AddLineNumbers(a:selected_text, s:start_line)
 
     let l:prompt = "Hello! I'm writing some code. Here's the full file that I have open (with line numbers):\n\n" . l:numbered_full_text .
-                 \ "\n\nNow, focus on this selected section (with line numbers):\n\n" . l:numbered_selected_text .
-                 \ "\n\nI have the following request about the selected section:\n" . a:user_request .
+                 \ "\n\nNow, consider this selected section (with line numbers):\n\n" . l:numbered_selected_text .
+                 \ "\n\nI have the following request:\n" . a:user_request .
                  \ "\n\nPlease provide a concise response. If my request involves modifying the code, " .
-                 \ "include ONLY the modified sections within <rewrite> tags following these EXACT formatting rules: " .
+                 \ "give a brief explanation of what is necessary to modify, and then include ONLY the ".
+                 \ "modified sections within <rewrite> tags following these EXACT formatting rules: " .
                  \ "\n\n1. Start each modification with <rewrite>" .
                  \ "\n2. On the FIRST line inside the <rewrite> tag, specify the exact line numbers in ONE of these formats:" .
                  \ "\n   - For a single line: \"Line 42:\" (include the colon)" .
@@ -229,7 +227,31 @@ function! s:GetAnalysisFromClaude(full_text, selected_text, user_request)
     let l:response_json = json_decode(l:response)
 
     if has_key(l:response_json, 'content') && len(l:response_json.content) > 0
-        return l:response_json.content[0].text
+        " Check for thinking block and extract it
+        let l:thinking = ""
+        let l:text = ""
+
+        for l:content in l:response_json.content
+            if l:content.type == "thinking"
+                let l:thinking = l:content.thinking
+            elseif l:content.type == "text"
+                let l:text = l:content.text
+            endif
+        endfor
+
+        " Prepare a combined response for the response file
+        let l:full_response = ""
+        if !empty(l:thinking)
+            let l:full_response = "===== THINKING TRACE =====\n\n" . l:thinking . "\n\n===== RESPONSE =====\n\n" . l:text
+        else
+            let l:full_response = l:text
+        endif
+
+        " Write to the response file
+        call writefile(split(l:full_response, "\n"), s:response_file)
+
+        " Return just the text content for processing
+        return l:text
     else
         return "Error: Unable to get analysis from Claude API"
     endif
