@@ -8,11 +8,13 @@ let g:loaded_llm = 1
 let s:excerpt_file = expand('~/vim_llm_excerpt_tmp')
 let s:excerpt_diff_file = expand('~/vim_llm_excerpt_diff_tmp')
 let s:chat_file = expand('~/vim_llm_chat_tmp')
+let s:response_file = expand('~/vim_llm_response_tmp')
 let s:original_file = ''
 let s:start_line = 0
 let s:end_line = 0
 let s:excerpt_bufnr = -1
 let s:chat_bufnr = -1
+let s:response_bufnr = -1
 
 function! s:CopyToTmp() range
     let s:original_file = expand('%:p')
@@ -47,27 +49,104 @@ function! s:GetCompletion()
 
     let l:response = s:GetAnalysisFromClaude(l:full_content, l:selected_content, l:user_request)
 
+    " Save the full response to the response file
+    call writefile(split(l:response, "\n"), s:response_file)
+
     " Check for rewrite tags
-    let l:rewrite_start = stridx(l:response, "<rewrite>")
-    let l:rewrite_end = strridx(l:response, "</rewrite>")
+    let l:has_changes = 0
+    let l:original_lines = getbufline(bufnr(s:original_file), 1, '$')
+    let l:modified_lines = copy(l:original_lines)
 
-    if l:rewrite_start != -1 && l:rewrite_end != -1
-        let l:rewrite = l:response[l:rewrite_start+9 : l:rewrite_end-1]
+    " First, collect all rewrites
+    let l:rewrites = []
+    let l:response_copy = l:response
+    let l:rewrite_start = stridx(l:response_copy, "<rewrite>")
+    let l:rewrite_end = stridx(l:response_copy, "</rewrite>")
 
-        " Update the excerpt buffer
-        call writefile(split(l:rewrite, "\n"), s:excerpt_file)
-        execute "buffer " . s:excerpt_bufnr
-        edit!
+    while l:rewrite_start != -1 && l:rewrite_end != -1
+        let l:has_changes = 1
+
+        " Extract the rewrite section
+        let l:rewrite_content = l:response_copy[l:rewrite_start+9 : l:rewrite_end-1]
+        let l:rewrite_lines = split(l:rewrite_content, "\n")
+
+        " First line should contain line number reference
+        let l:line_ref = l:rewrite_lines[0]
+        let l:line_start = 0
+        let l:line_end = 0
+
+        " Parse line numbers (format: "Lines X-Y:" or "Line X:")
+        if l:line_ref =~# '^\s*Lines\s\+\d\+\s*\-\s*\d\+\s*:'
+            let l:matches = matchlist(l:line_ref, 'Lines\s\+\(\d\+\)\s*\-\s*\(\d\+\)\s*:')
+            let l:line_start = str2nr(l:matches[1])
+            let l:line_end = str2nr(l:matches[2])
+        elseif l:line_ref =~# '^\s*Line\s\+\d\+\s*:'
+            let l:matches = matchlist(l:line_ref, 'Line\s\+\(\d\+\)\s*:')
+            let l:line_start = str2nr(l:matches[1])
+            let l:line_end = l:line_start
+        endif
+
+        " Only collect if we found valid line numbers
+        if l:line_start > 0 && l:line_end >= l:line_start
+            " Get the actual new content (skip the line reference)
+            let l:new_content = l:rewrite_lines[1:]
+
+            " Store this rewrite
+            call add(l:rewrites, {'start': l:line_start, 'end': l:line_end, 'content': l:new_content})
+        endif
+
+        " Remove this rewrite section from the response
+        let l:before_rewrite = l:response_copy[:l:rewrite_start-1]
+        let l:after_rewrite = l:response_copy[l:rewrite_end+10:]
+        let l:response_copy = l:before_rewrite . l:after_rewrite
+
+        " Find next rewrite section
+        let l:rewrite_start = stridx(l:response_copy, "<rewrite>")
+        let l:rewrite_end = stridx(l:response_copy, "</rewrite>")
+    endwhile
+
+    " Sort rewrites by line number (ascending) to process from top to bottom
+    call sort(l:rewrites, {a, b -> a.start - b.start})
+
+    " Apply rewrites sequentially, adjusting line numbers for subsequent rewrites
+    let l:line_offset = 0
+
+    for l:rewrite in l:rewrites
+        " Adjust line numbers based on previous changes
+        let l:adjusted_start = l:rewrite.start + l:line_offset
+        let l:adjusted_end = l:rewrite.end + l:line_offset
+
+        " Calculate the line count difference this change will introduce
+        let l:old_line_count = l:adjusted_end - l:adjusted_start + 1
+        let l:new_line_count = len(l:rewrite.content)
+        let l:diff = l:new_line_count - l:old_line_count
+
+        " Apply this change
+        let l:before = l:adjusted_start > 1 ? l:modified_lines[0:l:adjusted_start-2] : []
+        let l:after = l:adjusted_end < len(l:modified_lines) ? l:modified_lines[l:adjusted_end:] : []
+        let l:modified_lines = l:before + l:rewrite.content + l:after
+
+        " Update line offset for subsequent changes
+        let l:line_offset += l:diff
+    endfor
+
+    " Clean up the response by removing all rewrite sections
+    let l:clean_response = l:response_copy
+
+    if l:has_changes
+        " Write the modified content to the excerpt file
+        call writefile(l:modified_lines, s:excerpt_file)
 
         " Generate diff
         call s:GenerateDiff()
 
-        " Remove the rewrite tags from the response
-        let l:response = l:response[:l:rewrite_start-1] . l:response[l:rewrite_end+10:]
+        " Update the excerpt buffer
+        execute "buffer " . s:excerpt_bufnr
+        edit!
     endif
 
     " Update the request/response buffer
-    call writefile(split(l:response, "\n"), s:chat_file)
+    call writefile(split(l:clean_response, "\n"), s:chat_file)
     execute "buffer " . s:chat_bufnr
     edit!
     " go to the split above
@@ -76,18 +155,57 @@ function! s:GetCompletion()
     setlocal filetype=diff
 endfunction
 
+function! s:AddLineNumbers(text, start_line)
+    let l:lines = split(a:text, "\n")
+    let l:numbered_lines = []
+    let l:line_number = a:start_line
+
+    for l:line in l:lines
+        let l:numbered_line = printf("%4d | %s", l:line_number, l:line)
+        call add(l:numbered_lines, l:numbered_line)
+        let l:line_number += 1
+    endfor
+
+    return join(l:numbered_lines, "\n")
+endfunction
+
 function! s:GetAnalysisFromClaude(full_text, selected_text, user_request)
     let l:api_key = $ANTHROPIC_API_KEY
     if empty(l:api_key)
         return "Error: ANTHROPIC_API_KEY not set"
     endif
 
-    let l:prompt = "Hello! I'm writing some code. Here's the full file that I have open:\n\n" . a:full_text .
-                 \ "\n\nNow, focus on this selected section:\n\n" . a:selected_text .
+    " Add line numbers to both texts
+    let l:numbered_full_text = s:AddLineNumbers(a:full_text, 1)
+    let l:numbered_selected_text = s:AddLineNumbers(a:selected_text, s:start_line)
+
+    let l:prompt = "Hello! I'm writing some code. Here's the full file that I have open (with line numbers):\n\n" . l:numbered_full_text .
+                 \ "\n\nNow, focus on this selected section (with line numbers):\n\n" . l:numbered_selected_text .
                  \ "\n\nI have the following request about the selected section:\n" . a:user_request .
                  \ "\n\nPlease provide a concise response. If my request involves modifying the code, " .
-                 \ "include the rewritten version of the **entire file** within <rewrite> tags. " .
-                 \ "This is important because the entire file will be replaced by the version you rewrote."
+                 \ "include ONLY the modified sections within <rewrite> tags following these EXACT formatting rules: " .
+                 \ "\n\n1. Start each modification with <rewrite>" .
+                 \ "\n2. On the FIRST line inside the <rewrite> tag, specify the exact line numbers in ONE of these formats:" .
+                 \ "\n   - For a single line: \"Line 42:\" (include the colon)" .
+                 \ "\n   - For multiple consecutive lines: \"Lines 15-20:\" (include the colon)" .
+                 \ "\n   - Use the actual line numbers visible at the beginning of each line in the code" .
+                 \ "\n3. On the following lines, provide the COMPLETE new content for that section, including any unchanged lines" .
+                 \ "\n4. When writing the new content, do NOT include the line numbers in your code" .
+                 \ "\n5. End with </rewrite>" .
+                 \ "\n\nExample format:" .
+                 \ "\n<rewrite>" .
+                 \ "\nLines 10-12:" .
+                 \ "\nfunction newCode() {" .
+                 \ "\n  return 'new implementation';" .
+                 \ "\n}" .
+                 \ "\n</rewrite>" .
+                 \ "\n\nYou can include multiple <rewrite> sections if changes are needed in different parts of the file." .
+                 \ "\nVery important:" .
+                 \ "\n1. Make ALL necessary changes to fulfill the request completely. Do not merely describe changes - implement them in <rewrite> blocks" .
+                 \ "\n2. If multiple changes are needed in different parts of the file, include all of them with separate <rewrite> sections" .
+                 \ "\n3. NEVER include the line numbers in the actual code you provide - they are only for reference" .
+                 \ "\n4. Always use the exact line numbers you see at the beginning of each line (e.g. '10 | function foo()' means this is line 10)" .
+                 \ "\n5. The line numbers in your <rewrite> sections must exactly match the line numbers shown in the file"
 
     let l:json_data = json_encode({
         \ "model": "claude-3-7-sonnet-20250219",
