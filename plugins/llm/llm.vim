@@ -263,8 +263,19 @@ function! s:GenerateDiff()
 endfunction
 
 function! s:ApplyChanges()
-    " Save all buffers to ensure they're up to date
-    wall
+    " First ensure all buffers are saved, so we have the latest changes
+    silent! wall
+
+    " Check if we're in the excerpt view and need to regenerate the diff
+    let l:current_bufnr = bufnr('%')
+    let l:in_excerpt_view = (l:current_bufnr == s:excerpt_bufnr)
+
+    if l:in_excerpt_view
+        " We're in the excerpt view - regenerate the diff to make sure
+        " we're applying the latest changes
+        call s:GenerateDiff()
+        echo "Regenerated diff to include your edits"
+    endif
 
     " Apply the patch
     let l:patch_command = 'patch -u ' . shellescape(s:original_file) . ' -i ' . shellescape(s:excerpt_diff_file)
@@ -278,20 +289,24 @@ function! s:ApplyChanges()
         return
     endif
 
+    echo "Successfully applied changes to " . fnamemodify(s:original_file, ':t')
+
     " Reload the buffer to reflect changes
-    execute "buffer " . bufnr(s:original_file)
-    edit!
+    if bufloaded(s:original_file)
+        execute "buffer " . bufnr(s:original_file)
+        edit!
 
-    " Update the end line number
-    let s:end_line = line('$')
+        " Update the end line number
+        let s:end_line = line('$')
 
-    " Ensure the cursor is on a valid line
-    if line('.') > line('$')
-        normal! G
+        " Ensure the cursor is on a valid line
+        if line('.') > line('$')
+            normal! G
+        endif
+
+        " Ensure folds are opened as they were before
+        normal! zv
     endif
-
-    " Ensure folds are opened as they were before
-    normal! zv
 endfunction
 
 function! s:ToggleExcerptDiff()
@@ -314,10 +329,26 @@ function! s:ToggleExcerptDiff()
 
     " Toggle between excerpt and diff
     if &filetype == 'diff'
+        " Switching to excerpt view
         execute "buffer " . s:excerpt_bufnr
         execute "set filetype=" . &filetype
     else
+        " Switching to diff view - save any changes to the excerpt file first
+        " so they're included in the new diff
+        if &modified
+            write
+        endif
+
+        " Make sure the excerpt file is updated with any changes made in the buffer
+        if bufloaded(s:excerpt_bufnr) && getbufvar(s:excerpt_bufnr, '&modified')
+            execute "buffer " . s:excerpt_bufnr
+            write
+        endif
+
+        " Regenerate the diff to incorporate any edits made to the excerpt
         call s:GenerateDiff()
+
+        " Show the updated diff
         execute "edit " . s:excerpt_diff_file
         setlocal filetype=diff
     endif
